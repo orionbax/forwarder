@@ -3,12 +3,15 @@ import os
 import sys
 import json
 import time
+import platform
 
 def clear():
-    try:
+    if 'windows' in platform.system().lower():
         os.system('cls')
-    except Exception as err:
-        os.system('clear')
+        return
+    # elif 'linux' in platform.system().lower():
+    os.system('clear')
+    
 
 def download_dep():
     with open('requirements.txt', 'w') as file:
@@ -33,20 +36,16 @@ except Exception as err:
     sys.exit()
 
 settings_file_name = 'mySettings.json'
+
 if settings_file_name not in os.listdir(os.getcwd()):
     with open(settings_file_name, 'w') as file:
         file.write('')
-session_name = 'my_account'
-session_name = next(iter([name for name in os.listdir() if '.session' in name])) or session_name
-session_name = session_name.split('.')[0]
-
-app = Client(session_name.split('.')[0])
-
-
 
 
 def reset():
     data = {
+        'session_name': '',
+        'UPDATE': False,
         "sources": {},
         "blocked_words": [],
         "transform_words": {},
@@ -69,10 +68,13 @@ def read_settings():
 
 
 settings = read_settings()
+session_name = settings.get('session_name', 'my_account')
+# print(session_name)
+app = Client(session_name)
 
 
 def toggle_options(source=None):
-    os.system('clear')
+    clear()
     new_pref = settings['sources'][source]
     all_prefs = [key for key in settings['sources'][source] if 'allow' in key]
     options = [
@@ -101,10 +103,12 @@ def toggle_options(source=None):
 
 def set_preferences_page():
     sources = [source for source in settings['sources']]
-    os.system('clear')
+    clear()
     if sources:
         for i in range(len(sources)):
-            print(f'{i + 1}, {sources[i]}')
+            source = sources[i]
+            name = settings['sources'][source]['name']
+            print(f'{i + 1}, {name}')
         index = int(input("select by index: ")) - 1
         if index + 1 == 0:
             main()
@@ -123,24 +127,28 @@ async def check_exist(id):
                 chat = await app.get_chat(chat_id=id)
                 if chat:
                     return chat
-    except Exception as err:
+    except:
         pass
-        # print(err)
     return False
 
 # Working -
 def add_channel_page():
-    os.system('clear')
+    clear()
     print('Add Source page')
     options = '0, To return to the main page\n1, Add Source\n2, Remove Source'
     print(options)
     cmd = input('Enter: ')
     if cmd == '1':
-        os.system('clear')
+        clear()
         id = '-' + input('Source id -: ').replace(' ', '').replace('-',  '')
         
         # Check if channel exists
-        channel = asyncio.run(check_exist(id))  #app.loop.run_until_complete(check_exist(id))
+        channel = None
+        try:
+            channel = asyncio.run(check_exist(id))  #app.loop.run_until_complete(check_exist(id))
+        except Exception as err:
+            print('Add channel page \n', err)
+            time.sleep(5)
         if channel:
             add_channel(channel)
             save_changes()
@@ -152,12 +160,13 @@ def add_channel_page():
         main()
         
     elif cmd == '2':
-        os.system('clear')
+        clear()
         if settings['sources']:
             titles = [key for key in settings['sources']]
             print('0, To return to the main page')
             for i in range(len(titles)):
-                print(f'{i + 1}, {titles[i]}')
+                name = settings['sources'][titles[i]]['name']
+                print(f'{i + 1}, {name}')
             cmd = int(input('select by their index\n: ')) - 1
             if cmd == -1:
                 main()
@@ -175,7 +184,7 @@ def configure_key_words_page():
     cmd = input("enter: ")
     try:
         if cmd == '1':
-            word = input("word: ").lower()
+            word = input("word: ")
             if word and word not in settings['blocked_words']:
                 settings['blocked_words'].append(word)
                 save_changes()
@@ -186,7 +195,7 @@ def configure_key_words_page():
                 for i in range(len(settings['blocked_words'])):
                     print(f"{i + 1}, {settings['blocked_words'][i]}")
 
-                word = input('word: ').lower().replace(' ', '')
+                word = input('word: ').replace(' ', '')
                 if word == '0':
                     main()
 
@@ -196,8 +205,8 @@ def configure_key_words_page():
                     save_changes()
 
         elif cmd == '3':
-            key = input('word to look for: ').lower().replace(' ', '')
-            value = input('word to replace it with: ').lower().replace(' ', '')
+            key = input('word to look for: ').replace(' ', '')
+            value = input('word to replace it with: ').replace(' ', '')
             settings['transform_words'][key] = value
             save_changes()
 
@@ -229,25 +238,27 @@ def configure_key_words_page():
 
 def remove_destination():
     try:
-        os.system('clear')
+        clear()
         sources = [source for source in settings['sources']]
         for i in range(len(sources)):
             source = sources[i]
-            print(f'{i + 1}, {source}')
+            name = settings['sources'][source]['name']
+            print(f'{i + 1}, {name}')
 
-        destiny = int(input('to which channel: ')) - 1
-        if destiny != '0':
-            source = sources[destiny]
+        source = int(input('from which channel: ')) - 1
+        if source != '0':
+            source = sources[source]
             destinations = settings['sources'][source]['destinations']
-            for i in range(len(destinations)):
-                destiny = destinations[i]
-                print(f'{i + 1}, {destiny}')
+
 
             if destinations:
-                destiny = input('choose: ')
-                if destiny != '0':
-                    destiny = destinations[int(destiny) - 1]
-                    settings['sources'][source]['destinations'].remove(destiny)
+                for i in range(len(destinations)):
+                    name, destination = destinations[i]
+                    print(f'{i + 1}, {name}')
+                destination = input('choose: ')
+                if destination != '0':
+                    destination = destinations[int(destination) - 1]
+                    settings['sources'][source]['destinations'].remove(destination)
                     save_changes()
                     main()
 
@@ -261,7 +272,7 @@ def remove_destination():
 
 def add_destination():
     try:
-        os.system('clear')
+        clear()
         sources = [source for source in settings['sources']]
         print('ENTER 0 TO exit')
         print("[Choose a channel to forward from]")
@@ -351,7 +362,7 @@ async def send_message(source, message, is_media=False):
             if message.poll:
                 pass
             elif is_media and (source['allow_image'] or source['allow_video'] or source['allow_audio'] or source['allow_document']):
-                print(message, "Message")
+                # print(message, "Message")
                 file_path = await app.download_media(message,in_memory=True)
 
             if message.photo and source['allow_image']:
@@ -373,7 +384,6 @@ async def send_message(source, message, is_media=False):
             elif message.text and source['allow_text']:
                 for destination in destinations:
                     title, destination = destination
-                    f=print(f"Title = {title}, destination = {destination}")
                     if configure_text(message.text): # To avoid sending an empty message
                         await app.send_message(int(destination),text=configure_text(message.text))
             elif message.poll and source['allow_poll']:
@@ -400,6 +410,7 @@ async def send_message(source, message, is_media=False):
 @app.on_message()
 async def process_channel_message(client, message):
     try:
+        
         id = message.chat.id
         source = settings['sources'].get(str(id), None)
 
@@ -413,8 +424,7 @@ async def process_channel_message(client, message):
             except Exception as err:
                 print(err)
                 print(
-                    '[message for the developer]: This error happened in the process_channel_message() [inner]')
-                print(message)
+                    '[message for the developer]: This error happened in the process_channel_message()')
     except Exception as err:
         print(err)
         print('[message for the developer]: This error happened in the process_channel_message() [outer]')
@@ -422,7 +432,10 @@ async def process_channel_message(client, message):
 
 async def reconnect():
     try:
+        clear()
+        print("no session has been found")
         username = input("Give your session a username(optional): ")
+        username = username if username else "my_account"
         api_id = int(input('api_id: '))
         api_hash = input('api_hash: ').replace(' ', '')
         phone_number = input(
@@ -434,6 +447,8 @@ async def reconnect():
         async with app:
             await app.get_me()
             print("Created session!")
+            settings['session_name'] = username
+            save_changes()
             time.sleep(2)
 
     except Exception as err:
@@ -455,6 +470,7 @@ async def start_app():
 
     except AttributeError as err:
         await reconnect()
+        return
     except ConnectionError as err:
         print(err)
         print("Poor connection!!!")
@@ -468,13 +484,13 @@ async def start_app():
 def main():
     try:
         remove_files()
-        os.system('clear')
+        clear()
         print("Main Page")
         print('0, To quit the program')
         options = "1, Add or Remove a Source\n2, Key Words\n3, Preferences\n4, Add Destination\n5, Remove destination"
         print(options)
         cmd = input("enter: ")
-        os.system('clear')
+        clear()
 
         if cmd == '1':
             add_channel_page()
@@ -503,37 +519,61 @@ def main():
 ##New Functions
 
 async def update():
-
+    global session_name
+    if not session_name: # If the user hasn't logged in yet
+        print("NO session", session_name)
+        return
+    isSafe = True
+    print("Checking settings")
     for source in settings['sources']:
         channel = await check_exist(source)
         if channel:
             val = settings['sources'][source]
             val['name'] = channel.title
             settings['sources'][source] = val
-            settings['UPDATE'] = False
+        else:
+            print(source, "<- Source does not exist")
+            isSafe = False
         # settings['sources'][channel.id] = val
-    with open(settings_file_name, 'w') as file:
-        json.dump(settings, file)
+    
+
+    if isSafe: # IF everything is good then go ahead and disable update
+        settings['UPDATE'] = False
+        # print("session name is ->",session_name)
+        # settings['session_name'] = session_name
+        print("Settigns are all good!")
+    else:
+        confirm_reset = input("Reset settings(this will reset your settings) y/n: ").lower()
+        confirm_reset = confirm_reset[0] if confirm_reset else ' '
+        reset() if confirm_reset[0] == 'y' else None
+
+    
+    print("Restart the program")
+    sys.exit()        
+
 
 if __name__ == '__main__':
-    
-    loop = asyncio.get_event_loop()
-    # loop.run_until_complete(start_app())
-    options = "1, Start bot\n2, Configure bot"
+    session_name = settings.get("session_name", 'my_account')
+
+    options = "1, Start bot\n2, Configure bot \n3, Checks Settings \n4, logout"
     print(options)
     cmd = input('Choose: ')
     try:
+        # if settings.get("UPDATE", True):
         if cmd == '1':
             try:
                 print(f'Listening to {len(settings["sources"])} sources')
+                # app = Client(session_name)
                 app.run()
             except Exception as err:
-                print(err)
+                # print("Occured in the if ___name__", err)
                 asyncio.run(start_app()) #loop.run_until_complete(start_app())
                 input('Hit enter to restart...')
                 sys.exit()
         elif cmd == '2':
             main()
+        elif cmd == '3':
+            asyncio.run(update())
         else:
             print('invalid input')
     except KeyboardInterrupt as err:
@@ -543,11 +583,13 @@ if __name__ == '__main__':
     except Exception as err:
         print(err)
 
+# asyncio.run(update())
+
 # if settings.get('UPDATE', None):
 #     asyncio.run(update())
 # else: 
 #     print('up to date')
-# # asyncio.run(update())
+# asyncio.run(update())
 
 
 # print(app.loop.run_until_complete(check_exist(id="-1001531935230")))
