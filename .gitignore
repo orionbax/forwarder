@@ -1,1 +1,10 @@
 mytoken
+.creds
+athemII.session
+backups/
+demoSettings.json
+downloads/
+ids.txt
+mySettings.json
+my_account.session
+show_channel_id.py

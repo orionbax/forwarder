@@ -2,7 +2,13 @@ import asyncio
 import os
 import sys
 import json
+import time
 
+def clear():
+    try:
+        os.system('cls')
+    except Exception as err:
+        os.system('clear')
 
 def download_dep():
     with open('requirements.txt', 'w') as file:
@@ -30,30 +36,13 @@ settings_file_name = 'mySettings.json'
 if settings_file_name not in os.listdir(os.getcwd()):
     with open(settings_file_name, 'w') as file:
         file.write('')
+session_name = 'my_account'
+session_name = next(iter([name for name in os.listdir() if '.session' in name])) or session_name
+session_name = session_name.split('.')[0]
 
-session_name = 'my_session.session'
 app = Client(session_name.split('.')[0])
 
 
-async def reconnect():
-    try:
-        api_id = int(input('api_id: '))
-        api_hash = input('api_hash: ').replace(' ', '')
-        phone_number = input(
-            'phone number: +').replace('+', '').replace(' ', '')
-        app = Client(session_name.split('.')[0], api_id=api_id,
-                     api_hash=api_hash,
-                     phone_number=phone_number)
-        await app.start()
-        if not app.is_connected:
-            os.remove(session_name)
-            print('restart the program and login again')
-            input('ENTER to exit...')
-            sys.exit()
-
-    except Exception as err:
-        print(err)
-        input()
 
 
 def reset():
@@ -83,7 +72,7 @@ settings = read_settings()
 
 
 def toggle_options(source=None):
-    os.system('cls')
+    os.system('clear')
     new_pref = settings['sources'][source]
     all_prefs = [key for key in settings['sources'][source] if 'allow' in key]
     options = [
@@ -112,7 +101,7 @@ def toggle_options(source=None):
 
 def set_preferences_page():
     sources = [source for source in settings['sources']]
-    os.system('cls')
+    os.system('clear')
     if sources:
         for i in range(len(sources)):
             print(f'{i + 1}, {sources[i]}')
@@ -123,28 +112,54 @@ def set_preferences_page():
     main()
 
 
+async def check_exist(id):
+    global app
+    try:
+        if app.is_connected:
+            chat = await app.get_chat(chat_id=id)
+            return chat
+        else: 
+            async with Client(session_name) as app:
+                chat = await app.get_chat(chat_id=id)
+                if chat:
+                    return chat
+    except Exception as err:
+        pass
+        # print(err)
+    return False
+
+# Working -
 def add_channel_page():
-    os.system('cls')
+    os.system('clear')
     print('Add Source page')
     options = '0, To return to the main page\n1, Add Source\n2, Remove Source'
     print(options)
     cmd = input('Enter: ')
     if cmd == '1':
-        os.system('cls')
-        cmd = ('-' + input('Source id -: ')
-               ).replace(' ', '').replace('--',  '-')
-        add_channel(cmd)
-        save_changes()
+        os.system('clear')
+        id = '-' + input('Source id -: ').replace(' ', '').replace('-',  '')
+        
+        # Check if channel exists
+        channel = asyncio.run(check_exist(id))  #app.loop.run_until_complete(check_exist(id))
+        if channel:
+            add_channel(channel)
+            save_changes()
+            print("Chat exist!")
+            time.sleep(3)
+        else:
+            print(f"Channel {id} does not exist ")
+            time.sleep(3)
         main()
+        
     elif cmd == '2':
-        os.system('cls')
+        os.system('clear')
         if settings['sources']:
             titles = [key for key in settings['sources']]
             print('0, To return to the main page')
             for i in range(len(titles)):
                 print(f'{i + 1}, {titles[i]}')
             cmd = int(input('select by their index\n: ')) - 1
-            if cmd + 1 == 0:
+            if cmd == -1:
                 main()
             elif settings['sources'].get(titles[cmd], None):
                 del settings['sources'][titles[cmd]]
@@ -214,7 +229,7 @@ def configure_key_words_page():
 
 def remove_destination():
     try:
-        os.system('cls')
+        os.system('clear')
         sources = [source for source in settings['sources']]
         for i in range(len(sources)):
             source = sources[i]
@@ -246,23 +261,30 @@ def remove_destination():
 
 def add_destination():
     try:
-        os.system('cls')
+        os.system('clear')
         sources = [source for source in settings['sources']]
         print('ENTER 0 TO exit')
+        print("[Choose a channel to forward from]")
+        
         for i in range(len(sources)):
             source = sources[i]
-            print(f'{i + 1}, {source}')
+            name = settings['sources'][source]['name']
+            print(f'{i + 1}, {name}')
 
-        destiny = input('choose: ')
-        if destiny != '0':
-            destiny = int(destiny) - 1
-            source = sources[destiny]
-            username = '-' + (input("id:").replace(' ', '').replace('-', ''))
-            if username and username not in settings['sources'][source]['destinations']:
-                settings['sources'][source]['destinations'].append(username)
-                save_changes()
-                main()
-
+        destination = input('choose: ')
+        if destination != '0':
+            destination = int(destination) - 1
+            source = sources[destination]
+            id = '-' + (input("id:").replace(' ', '').replace('-', ''))
+            if id and id not in settings['sources'][source]['destinations']:
+                channel = asyncio.run(check_exist(id))
+                if channel:
+                    settings['sources'][source]['destinations'].append([channel.title, id])
+                    save_changes()
+                    main()
+                else:
+                    print(f"{id} is an INVALID id !")
+                    time.sleep(2)
     except KeyError as err:
         add_destination()
     except Exception as err:
@@ -275,33 +297,36 @@ def save_changes():
         json.dump(settings, file)
 
 
-def add_channel(userTitle):
-    val = {"allow_image": True, "allow_video": True, "allow_audio": False,
+def add_channel(channel):
+    titles = [key for key in settings['sources'] if key == str(channel.id)]
+    if len(titles) > 0:
+        return 
+    val = {"name": channel.title,"allow_image": True, "allow_video": True, "allow_audio": False,
            'allow_text': True, 'allow_poll': True, "allow_document": True, 'destinations': []}
-    settings['sources'][userTitle] = val
+    settings['sources'][channel.id] = val
     with open(settings_file_name, 'w') as file:
         json.dump(settings, file)
 
 
+# Case sensetive
 def configure_text(caption):
-    newCaption = caption
+    tempCaption = caption
     if caption:
-        caption = caption.lower()
+        # caption = caption.lower()
         for word in settings['blocked_words']:
-            if word.lower() in caption:
-                newCaption = caption.replace(word.lower(), '')
-        return transform_caption(newCaption)
+            if word in caption:
+                tempCaption = caption.replace(word, '')
+        return transform_caption(tempCaption)
     return transform_caption(caption)
 
-
+# Case sensetive
 def transform_caption(caption):
     newCaption = caption
     if caption:
-        newCaption = caption.lower()
+        # newCaption = caption.lower()
         for key, value in settings['transform_words'].items():
-            if key.lower().replace(' ', '') in newCaption:
-                newCaption = newCaption.replace(
-                    key.lower(), value.lower()).capitalize()
+            if key.replace(' ', '') in newCaption:
+                newCaption = newCaption.replace(key, value)#.capitalize()
     return newCaption
 
 
@@ -320,48 +345,56 @@ def remove_files():
 async def send_message(source, message, is_media=False):
     try:
         destinations = source['destinations']
-        file_path = message.text
-        caption = configure_text(message.caption)
+        file_path = message.text.capitalize() if message.text else None
+        caption = configure_text(message.caption).capitalize() if message.caption else None
         if destinations:
             if message.poll:
                 pass
             elif is_media and (source['allow_image'] or source['allow_video'] or source['allow_audio'] or source['allow_document']):
-                file_path = await app.download_media(message)
+                print(message, "Message")
+                file_path = await app.download_media(message,in_memory=True)
+
             if message.photo and source['allow_image']:
-                for destiny in destinations:
-                    await app.send_photo(destiny, photo=file_path, caption=caption)
-                    # print(f'sent to {destiny}')
+                for destination in destinations:
+                    title, destination = destination
+                    await app.send_photo(destination, photo=file_path, caption=caption)
             elif message.document and source['allow_document']:
-                for destiny in destinations:
-                    await app.send_document(destiny, document=file_path, caption=caption)
+                for destination in destinations:
+                    title, destination = destination
+                    await app.send_document(destination, document=file_path, caption=caption)
             elif message.video and source['allow_video']:
-                for destiny in destinations:
-                    await app.send_video(destiny, video=file_path, caption=caption)
+                for destination in destinations:
+                    title, destination = destination
+                    await app.send_video(destination, video=file_path, caption=caption)
             elif message.voice and source['allow_audio']:
-                for destiny in destinations:
-                    await app.send_audio(destiny, audio=file_path, caption=caption)
+                for destination in destinations:
+                    title, destination = destination
+                    await app.send_audio(destination, audio=file_path, caption=caption)
             elif message.text and source['allow_text']:
-                for destiny in destinations:
-                    await app.send_message(int(destiny), configure_text(message.text))
-                    # print(f'sent to {destiny}')
+                for destination in destinations:
+                    title, destination = destination
+                    f=print(f"Title = {title}, destination = {destination}")
+                    if configure_text(message.text): # To avoid sending an empty message
+                        await app.send_message(int(destination),text=configure_text(message.text))
             elif message.poll and source['allow_poll']:
-                for destiny in destinations:
+                for destination in destinations:
+                    title, destination = destination
                     options = [option.text for option in message.poll.options]
-                    await app.send_poll(destiny, question=message.poll.question, options=options)
-                    # print(f'sent to {destiny}')
+                    await app.send_poll(destination, question=message.poll.question, options=options)
             elif message.sticker or message.animation and source['allow_image']:
                 if message.animation:
-                    for destiny in destinations:
-                        await app.send_animation(destiny, animation=file_path, caption=caption)
-                        # print(f'sent to {destiny}')
+                    for destination in destinations:
+                        title, destination = destination
+                        await app.send_animation(destination, animation=file_path,caption=caption)
                 elif message.sticker:
-                    for destiny in destinations:
-                        await app.send_sticker(destiny, sticker=file_path, caption=caption)
-                        # print(f'sent to {destiny}')
+                    for destination in destinations:
+                        title, destination = destination
+                        await app.send_sticker(destination, sticker=file_path)
 
     except Exception as err:
         print(err)
         print('[message for the developer]: This error happened in the send_message()')
+
 
 
 @app.on_message()
@@ -387,16 +420,61 @@ async def process_channel_message(client, message):
         print('[message for the developer]: This error happened in the process_channel_message() [outer]')
 
 
+async def reconnect():
+    try:
+        username = input("Give your session a username(optional): ")
+        api_id = int(input('api_id: '))
+        api_hash = input('api_hash: ').replace(' ', '')
+        phone_number = input(
+            'phone number: +').replace('+', '').replace(' ', '')
+        session_name = username if len(username) > 0 else session_name
+        app = Client(session_name.split('.')[0], api_id=api_id,
+                     api_hash=api_hash,
+                     phone_number=phone_number)
+        async with app:
+            await app.get_me()
+            print("Created session!")
+            time.sleep(2)
+
+    except Exception as err:
+        print(err)
+
+        os.remove(session_name)
+        print('restart the program and login again')
+        input('ENTER to exit...')
+        sys.exit()
+        input()
+
+
+async def start_app():
+    global app
+    
+    try:
+        async with Client(session_name) as app:
+            await app.get_me()
+
+    except AttributeError as err:
+        await reconnect()
+    except ConnectionError as err:
+        print(err)
+        print("Poor connection!!!")
+        sys.exit()
+    except Exception as err:
+        print(err)
+        print("in the start_app function")
+        sys.exit()
+
+
 def main():
     try:
         remove_files()
-        os.system('cls')
+        os.system('clear')
         print("Main Page")
         print('0, To quit the program')
         options = "1, Add or Remove a Source\n2, Key Words\n3, Preferences\n4, Add Destination\n5, Remove destination"
         print(options)
         cmd = input("enter: ")
-        os.system('cls')
+        os.system('clear')
 
         if cmd == '1':
             add_channel_page()
@@ -422,20 +500,25 @@ def main():
     main()
 
 
-async def start_app(loop=None):
-    try:
-        async with app:
-            app.send_message("me", "Starting app")
+##New Functions
 
-    except AttributeError as err:
-        await reconnect()
-    except ConnectionError as err:
-        print(err)
-    except Exception as err:
-        print(err)
+async def update():
+
+    for source in settings['sources']:
+        channel = await check_exist(source)
+        if channel:
+            val = settings['sources'][source]
+            val['name'] = channel.title
+            settings['sources'][source] = val
+            settings['UPDATE'] = False
+        # settings['sources'][channel.id] = val
+    with open(settings_file_name, 'w') as file:
+        json.dump(settings, file)
 
 if __name__ == '__main__':
+    
     loop = asyncio.get_event_loop()
+    # loop.run_until_complete(start_app())
     options = "1, Start bot\n2, Configure bot"
     print(options)
     cmd = input('Choose: ')
@@ -445,7 +528,8 @@ if __name__ == '__main__':
                 print(f'Listening to {len(settings["sources"])} sources')
                 app.run()
             except Exception as err:
-                loop.run_until_complete(start_app(loop))
+                print(err)
+                asyncio.run(start_app()) #loop.run_until_complete(start_app())
                 input('Hit enter to restart...')
                 sys.exit()
         elif cmd == '2':
@@ -453,11 +537,17 @@ if __name__ == '__main__':
         else:
             print('invalid input')
     except KeyboardInterrupt as err:
-        try:
-            remove_files()
-            print(err)
-            sys.exit()
-        except Exception as err:
-            print(err)
+        remove_files()
+        sys.exit()
+
     except Exception as err:
         print(err)
+
+# if settings.get('UPDATE', None):
+#     asyncio.run(update())
+# else: 
+#     print('up to date')
+# # asyncio.run(update())
+
+
+# print(app.loop.run_until_complete(check_exist(id="-1001531935230")))
